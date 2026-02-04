@@ -154,11 +154,11 @@ function loadTexture(dataUri, numChars) {
             const id = ctx.getImageData(0, 0, img.width, img.height);
             const d = id.data;
             const result = [];
+            for (let ci = 0; ci < numChars; ci++) {
                 const charGrid = [];
                 for (let row = 0; row < 8; row++) {
                     const rowArr = [];
                     for (let col = 0; col < 8; col++) {
-            for (let ci = 0; ci < numChars; ci++) {
                         const px = ci * 8 + col;
                         const idx = (row * img.width + px) * 4;
                         rowArr.push(d[idx] > 128);
