@@ -7,7 +7,7 @@
   <!-- ASCII characters arranged to suggest a converted image -->
   <text font-family="monospace" font-size="11" font-weight="bold" fill="black">
     <tspan x="20" y="32">@@##%%</tspan>
-    <tspan x="20" y="44">##&&@@</tspan>
+    <tspan x="20" y="44">##%%@@</tspan>
     <tspan x="20" y="56">%%##**</tspan>
     <tspan x="20" y="68">**++==</tspan>
     <tspan x="20" y="80">++--::</tspan>
