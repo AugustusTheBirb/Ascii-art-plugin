@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Art Renderer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #252525; color: #ccc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px; padding: 8px;
+}
+h2 { font-size: 13px; margin-bottom: 8px; color: #eee; }
+.section { margin-bottom: 10px; }
+label { display: block; margin-bottom: 4px; color: #aaa; font-size: 11px; }
+.row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.row label { margin-bottom: 0; flex-shrink: 0; min-width: 90px; }
+input[type="color"] {
+    width: 32px; height: 22px; border: 1px solid #555; background: #333;
+    cursor: pointer; padding: 0;
+}
+input[type="range"] { flex: 1; height: 14px; accent-color: #4a9eff; }
+input[type="checkbox"] { accent-color: #4a9eff; }
+.radio-group { display: flex; gap: 10px; }
+.radio-group label { display: flex; align-items: center; gap: 3px; min-width: auto; }
+.val { color: #8af; min-width: 24px; text-align: right; font-size: 11px; }
+button {
+    width: 100%; padding: 7px; border: 1px solid #555; border-radius: 3px;
+    cursor: pointer; font-size: 12px; font-weight: 600;
+}
+#applyBtn { background: #2a6cb8; color: #fff; }
+#applyBtn:hover { background: #3580d4; }
+#applyBtn:disabled { background: #444; color: #777; cursor: not-allowed; }
+#status { margin-top: 8px; font-size: 11px; color: #888; min-height: 14px; }
+hr { border: none; border-top: 1px solid #3a3a3a; margin: 8px 0; }
+#paletteSection { display: none; }
+#paletteSwatches { display: flex; gap: 2px; margin-bottom: 6px; }
+#paletteSwatches .swatch { width: 28px; height: 20px; border: 1px solid #555; border-radius: 2px; }
+#regenBtn { background: #444; color: #ccc; margin-bottom: 0; }
+#regenBtn:hover { background: #555; }
+</style>
+</head>
+<body>
+
+<h2>ASCII Art Renderer</h2>
+
+<div class="section">
+    <div class="row">
+        <label>Foreground</label>
+        <input type="color" id="cWhite" value="#ffffff">
+    </div>
+    <div class="row">
+        <label>Background</label>
+        <input type="color" id="cBlack" value="#000000">
+    </div>
+    <div class="row">
+        <label>Dark gradient</label>
+        <input type="color" id="c3" value="#000000">
+    </div>
+</div>
+
+<hr>
+
+<div class="section">
+    <label>Mode</label>
+    <div class="radio-group">
+        <label><input type="radio" name="mode" value="gradient" checked> Gradient</label>
+        <label><input type="radio" name="mode" value="binary"> Binary</label>
+        <label><input type="radio" name="mode" value="blockcolor"> Block color</label>
+        <label><input type="radio" name="mode" value="palette"> Palette</label>
+    </div>
+</div>
+
+<div class="section" id="paletteSection">
+    <div class="row">
+        <label>Palette type</label>
+        <div class="radio-group">
+            <label><input type="radio" name="palType" value="complementary" checked> Complementary</label>
+            <label><input type="radio" name="palType" value="monochrome"> Monochrome</label>
+        </div>
+    </div>
+    <div class="row">
+        <input type="checkbox" id="palCustomBase">
+        <label for="palCustomBase" style="min-width:auto">Custom base color</label>
+        <input type="color" id="palBaseColor" value="#1a0050" disabled>
+    </div>
+    <div id="paletteSwatches"></div>
+    <button id="regenBtn" onclick="regeneratePalette()">Regenerate palette</button>
+</div>
+
+<hr>
+
+<div class="section">
+    <div class="row">
+        <input type="checkbox" id="edges" checked>
+        <label for="edges" style="min-width:auto">Edge detection</label>
+    </div>
+    <div class="row">
+        <label>Sensitivity</label>
+        <input type="range" id="sensitivity" min="1" max="64" value="50">
+        <span class="val" id="sensVal">50</span>
+    </div>
+</div>
+
+<hr>
+
+<div class="section">
+    <div class="row">
+        <input type="checkbox" id="norm" checked>
+        <label for="norm" style="min-width:auto">Normalize brightness</label>
+    </div>
+    <div class="row">
+        <input type="checkbox" id="randomize">
+        <label for="randomize" style="min-width:auto">Randomize bright chars</label>
+    </div>
+</div>
+
+<hr>
+
+<div class="section">
+    <label>Output</label>
+    <div class="radio-group">
+        <label><input type="radio" name="output" value="layer" checked> New layer</label>
+        <label><input type="radio" name="output" value="doc"> New document</label>
+    </div>
+</div>
+
+<hr>
+
+<button id="applyBtn" onclick="apply()">Apply</button>
+<div id="status">Ready</div>
+
+<script>
+// --- Texture data (base64-encoded PNGs) ---
+const TEX_LETTERS_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAIBAMAAAC7TOTsAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAGUExURQAAAP///6XZn90AAAAJcEhZcwAADsMAAA7DAcdvqGQAAABQSURBVCjPfY8JCgAxCAPND5L/f3aTUqp7sEIVOoNp67PEKsJT4xLc0DTQJ/0lIC3QIkHeV1vCiCDxiFhrO6KFwCMUO0Izf0t5uY78U+ub4gXKdwOyH0MDzAAAAABJRU5ErkJggg==";
+const TEX_SLASHES_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAIBAMAAABqq+CcAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAGUExURQAAAP///6XZn90AAAAJcEhZcwAADsIAAA7CARUoSoAAAAAvSURBVBjTYwABRgEGKACxQFgQJiDIgEMApgdMYxUAKmUUFBSAaMUQQLKYUYCBAQBwTgHd7U7HagAAAABJRU5ErkJggg==";
+const TEX_BRIGHT_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAIBAMAAAC7TOTsAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAGUExURQAAAP///6XZn90AAAAJcEhZcwAADsIAAA7CARUoSoAAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuOBtp6qgAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAA8nYBAOgDAADydgEA6AMAAFBhaW50Lk5FVCA1LjEuOAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADMbhZ8SlPoHAAAAFhJREFUKM9dT4ENwDAIwg/g/2c7ULtsNTSoFCtQxJ6SCIdrhoQQNwoIcFkh+ZBJfBMrZPEvsK25bPtoq+cuoqTSs6wFPXFsO94R+gruFnnZhne9/sMWhko8vzoFSYulHJsAAAAASUVORK5CYII=";
+
+// Decoded texture lookup tables: tex[charIndex][row][col] = boolean
+let texLetters = null;
+let texSlashes = null;
+let texBright = null;
+
+function loadTexture(dataUri, numChars) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const c = document.createElement("canvas");
+            c.width = img.width;
+            c.height = img.height;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            const id = ctx.getImageData(0, 0, img.width, img.height);
+            const d = id.data;
+            const result = [];
+                const charGrid = [];
+                for (let row = 0; row < 8; row++) {
+                    const rowArr = [];
+                    for (let col = 0; col < 8; col++) {
+            for (let ci = 0; ci < numChars; ci++) {
+                        const px = ci * 8 + col;
+                        const idx = (row * img.width + px) * 4;
+                        rowArr.push(d[idx] > 128);
+                    }
+                    charGrid.push(rowArr);
+                }
+                result.push(charGrid);
+            }
+            resolve(result);
+        };
+        img.src = dataUri;
+    });
+}
+
+async function initTextures() {
+    texLetters = await loadTexture(TEX_LETTERS_B64, 8);
+    texSlashes = await loadTexture(TEX_SLASHES_B64, 4);
+    texBright = await loadTexture(TEX_BRIGHT_B64, 8);
+}
+
+// --- Photopea communication ---
+let messageResolve = null;
+
+window.addEventListener("message", (e) => {
+    if (e.data instanceof ArrayBuffer) {
+        if (messageResolve) {
+            const r = messageResolve;
+            messageResolve = null;
+            r(e.data);
+        }
+    }
+});
+
+function ppEval(script) {
+    window.parent.postMessage(script, "*");
+}
+
+function ppGetImage() {
+    return new Promise((resolve) => {
+        messageResolve = resolve;
+        ppEval('app.activeDocument.saveToOE("png");');
+    });
+}
+
+function ppSendAsNewDoc(arrayBuffer) {
+    window.parent.postMessage(arrayBuffer, "*");
+}
+
+function ppSendAsLayer(dataURI) {
+    ppEval('app.open("' + dataURI + '", null, true);');
+}
+
+function arrayBufferToImageData(buf) {
+    return new Promise((resolve) => {
+        const blob = new Blob([buf], { type: "image/png" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            const c = document.createElement("canvas");
+            c.width = img.width;
+            c.height = img.height;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            const id = ctx.getImageData(0, 0, img.width, img.height);
+            URL.revokeObjectURL(url);
+            resolve(id);
+        };
+        img.src = url;
+    });
+}
+
+function imageDataToArrayBuffer(imageData) {
+    return new Promise((resolve) => {
+        const c = document.createElement("canvas");
+        c.width = imageData.width;
+        c.height = imageData.height;
+        const ctx = c.getContext("2d");
+        ctx.putImageData(imageData, 0, 0);
+        c.toBlob((blob) => {
+            blob.arrayBuffer().then(resolve);
+        }, "image/png");
+    });
+}
+
+function imageDataToDataURI(imageData) {
+    const c = document.createElement("canvas");
+    c.width = imageData.width;
+    c.height = imageData.height;
+    const ctx = c.getContext("2d");
+    ctx.putImageData(imageData, 0, 0);
+    return c.toDataURL("image/png");
+}
+
+// --- OKLAB palette generation ---
+
+function oklchToSrgb(L, C, h) {
+    // OKLCH -> OKLAB
+    const hRad = h * Math.PI / 180;
+    const a = C * Math.cos(hRad);
+    const b = C * Math.sin(hRad);
+    // OKLAB -> LMS (cube roots)
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    const l = l_ * l_ * l_;
+    const m = m_ * m_ * m_;
+    const s = s_ * s_ * s_;
+    // LMS -> linear sRGB
+    let r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    let g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    let bl= -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    // Linear sRGB -> sRGB gamma
+    function gamma(c) {
+        if (c <= 0.0031308) return c * 12.92;
+        return 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    }
+    r = Math.round(Math.max(0, Math.min(1, gamma(r))) * 255);
+    g = Math.round(Math.max(0, Math.min(1, gamma(g))) * 255);
+    bl= Math.round(Math.max(0, Math.min(1, gamma(bl))) * 255);
+    return [r, g, bl];
+}
+
+let currentPalette = null;
+
+function srgbToOklch(r, g, b) {
+    // sRGB 0-255 -> linear
+    function invGamma(c) {
+        c /= 255;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    const lr = invGamma(r), lg = invGamma(g), lb = invGamma(b);
+    // linear sRGB -> LMS
+    const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+    const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+    const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+    // LMS -> OKLAB
+    const l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+    const L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
+    const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
+    const bk= 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
+    // OKLAB -> OKLCH
+    const C = Math.sqrt(a * a + bk * bk);
+    let h = Math.atan2(bk, a) * 180 / Math.PI;
+    if (h < 0) h += 360;
+    return [L, C, h];
+}
+
+function generatePalette() {
+    const useCustom = document.getElementById("palCustomBase").checked;
+    const palType = document.querySelector('input[name="palType"]:checked').value;
+    let hueA, chroma;
+    if (useCustom) {
+        const hex = document.getElementById("palBaseColor").value;
+        const rgb = [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+        const lch = srgbToOklch(rgb[0], rgb[1], rgb[2]);
+        hueA = lch[2];
+        chroma = Math.max(0.05, lch[1]);
+    } else {
+        hueA = Math.random() * 360;
+        chroma = 0.12 + Math.random() * 0.08;
+    }
+    const palette = [];
+    if (palType === "monochrome") {
+        // Single hue, from near-black to bright
+        const endL = 0.80 + Math.random() * 0.15;
+        for (let i = 0; i < 8; i++) {
+            const t = i / 7;
+            const L = 0.05 + endL * t;
+            const C = chroma * (0.3 + 0.7 * t); // low chroma when dark, full when bright
+            palette.push(oklchToSrgb(L, C, hueA));
+        }
+    } else {
+        // Complementary: sweep hue 180 degrees
+        const hueB = (hueA + 180) % 360;
+        const startL = 0.15 + Math.random() * 0.1;
+        const endL = 0.85 + Math.random() * 0.1;
+        for (let i = 0; i < 8; i++) {
+            const t = i / 7;
+            const L = startL + (endL - startL) * t;
+            const h = hueA + (hueB - hueA) * t;
+            palette.push(oklchToSrgb(L, chroma, h));
+        }
+    }
+    return palette;
+}
+
+function renderSwatches() {
+    const container = document.getElementById("paletteSwatches");
+    container.innerHTML = "";
+    if (!currentPalette) return;
+    for (let i = 0; i < 8; i++) {
+        const c = currentPalette[i];
+        const div = document.createElement("div");
+        div.className = "swatch";
+        div.style.background = "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+        container.appendChild(div);
+    }
+}
+
+function regeneratePalette() {
+    currentPalette = generatePalette();
+    renderSwatches();
+}
+
+// Regenerate on palette type change
+document.querySelectorAll('input[name="palType"]').forEach(r => {
+    r.addEventListener("change", regeneratePalette);
+});
+// Enable/disable base color picker
+document.getElementById("palCustomBase").addEventListener("change", (e) => {
+    document.getElementById("palBaseColor").disabled = !e.target.checked;
+    regeneratePalette();
+});
+document.getElementById("palBaseColor").addEventListener("input", () => {
+    if (document.getElementById("palCustomBase").checked) regeneratePalette();
+});
+
+// Show/hide palette section based on mode
+document.querySelectorAll('input[name="mode"]').forEach(r => {
+    r.addEventListener("change", () => {
+        document.getElementById("paletteSection").style.display =
+            document.querySelector('input[name="mode"]:checked').value === "palette" ? "block" : "none";
+    });
+});
+
+// Generate initial palette
+currentPalette = generatePalette();
+renderSwatches();
+
+// --- UI helpers ---
+const sensSlider = document.getElementById("sensitivity");
+const sensVal = document.getElementById("sensVal");
+sensSlider.addEventListener("input", () => { sensVal.textContent = sensSlider.value; });
+
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+}
+
+function getParams() {
+    return {
+        cWhite: hexToRgb(document.getElementById("cWhite").value),
+        cBlack: hexToRgb(document.getElementById("cBlack").value),
+        c3: hexToRgb(document.getElementById("c3").value),
+        mode: document.querySelector('input[name="mode"]:checked').value,
+        edges: document.getElementById("edges").checked,
+        sensitivity: parseInt(sensSlider.value),
+        norm: document.getElementById("norm").checked,
+        randomize: document.getElementById("randomize").checked,
+        outputMode: document.querySelector('input[name="output"]:checked').value,
+    };
+}
+
+function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
+}
+
+// --- Core algorithm ---
+
+function fixBorders(data, w, h, cBlack) {
+    const wA = (w >> 3) << 3;
+    const hA = (h >> 3) << 3;
+    for (let y = 0; y < h; y++) {
+        for (let x = wA; x < w; x++) {
+            const i = (y * w + x) * 4;
+            data[i] = cBlack[0]; data[i+1] = cBlack[1]; data[i+2] = cBlack[2]; data[i+3] = 255;
+        }
+    }
+    for (let x = 0; x < w; x++) {
+        for (let y = hA; y < h; y++) {
+            const i = (y * w + x) * 4;
+            data[i] = cBlack[0]; data[i+1] = cBlack[1]; data[i+2] = cBlack[2]; data[i+3] = 255;
+        }
+    }
+}
+
+function toGrayscale(data, w, h) {
+    const n = w * h;
+    for (let i = 0; i < n; i++) {
+        const off = i * 4;
+        const g = Math.round(0.299 * data[off] + 0.587 * data[off+1] + 0.114 * data[off+2]);
+        data[off] = g; data[off+1] = g; data[off+2] = g;
+    }
+}
+
+function normalize(data, w, h) {
+    const n = w * h;
+    const vals = new Float32Array(n);
+    for (let i = 0; i < n; i++) vals[i] = data[i * 4];
+    vals.sort();
+    const pct = Math.max(1, (n * 0.05) | 0);
+    let mi = 0;
+    for (let i = 0; i < pct; i++) mi += vals[i];
+    mi /= pct;
+    let ma = 0;
+    for (let i = n - pct; i < n; i++) ma += vals[i];
+    ma = ma / pct - mi;
+    if (ma < 1) ma = 1;
+    for (let i = 0; i < n; i++) {
+        const off = i * 4;
+        let v = Math.round(255 * ((data[off] - mi) / ma));
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        data[off] = v; data[off+1] = v; data[off+2] = v;
+    }
+}
+
+function calculateGradient(data, w, h) {
+    // Sobel kernels (3x3, stored flat row-major for JS access as k[ry*3+rx])
+    // Python kernel_top[col][row] = [[-1,-2,-1],[0,0,0],[1,2,1]] → transposed for row-major:
+    // Python kernel_down[col][row] = [[1,0,-1],[2,0,-2],[1,0,-1]] → transposed for row-major:
+    const kx = [-1,0,1, -2,0,2, -1,0,1];
+    const ky = [1,2,1, 0,0,0, -1,-2,-1];
+
+    const gx = new Float32Array(w * h);
+    const gy = new Float32Array(w * h);
+
+    // Apply both kernels in a single pass
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let sx = 0, sy = 0;
+            for (let ky2 = 0; ky2 < 3; ky2++) {
+                for (let kx2 = 0; kx2 < 3; kx2++) {
+                    const px = (x + kx2) % w;
+                    const py = (y + ky2) % h;
+                    const val = data[(py * w + px) * 4];
+                    sx += val * kx[ky2 * 3 + kx2];
+                    sy += val * ky[ky2 * 3 + kx2];
+                }
+            }
+            const idx = y * w + x;
+            gx[idx] = sx;
+            gy[idx] = sy;
+        }
+    }
+
+    const edgeMap = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        const mag = Math.sqrt(gx[i] * gx[i] + gy[i] * gy[i]);
+        if (mag > 100) {
+            let a = Math.round(255 * (Math.atan2(gy[i], gx[i]) / (2 * Math.PI) + 0.5));
+            a = (((a + 16) % 255) / 32 | 0) % 4;
+            edgeMap[i] = a;
+        } else {
+            edgeMap[i] = 4;
+        }
+    }
+    return edgeMap;
+}
+
+function renderAscii(data, w, h, edgeMap, params, origData) {
+    const { cWhite, cBlack, c3, sensitivity, mode, edges, randomize } = params;
+    const blocksX = (w >> 3);
+    const blocksY = (h >> 3);
+
+    for (let bx = 0; bx < blocksX; bx++) {
+        for (let by = 0; by < blocksY; by++) {
+            let bSum = 0;
+            const edgeCounts = [0, 0, 0, 0, 0];
+
+            // Accumulate block statistics + block-average original color
+            let avgR = 0, avgG = 0, avgB = 0;
+            for (let dy = 0; dy < 8; dy++) {
+                for (let dx = 0; dx < 8; dx++) {
+                    const px = bx * 8 + dx;
+                    const py = by * 8 + dy;
+                    const pIdx = py * w + px;
+                    bSum += data[pIdx * 4];
+                    edgeCounts[edgeMap[pIdx]]++;
+                    if (mode === "blockcolor") {
+                        const oo = pIdx * 4;
+                        avgR += origData[oo];
+                        avgG += origData[oo+1];
+                        avgB += origData[oo+2];
+                    }
+                }
+            }
+
+            let blockColor;
+            if (mode === "blockcolor") {
+                blockColor = [(avgR / 64) | 0, (avgG / 64) | 0, (avgB / 64) | 0];
+            }
+
+            const charIdx = (bSum / (256 * 8)) | 0;
+            const isEdge = edges && edgeCounts[4] < sensitivity && charIdx >= 1;
+
+            let texData, texIdx;
+            if (isEdge) {
+                // Find dominant edge direction (ignore index 4)
+                edgeCounts[4] = 0;
+                let maxVal = edgeCounts[0], maxI = 0;
+                for (let k = 1; k < 4; k++) {
+                    if (edgeCounts[k] > maxVal) { maxVal = edgeCounts[k]; maxI = k; }
+                }
+                texData = texSlashes;
+                texIdx = maxI;
+            } else {
+                let useRandom = false;
+                let rIdx = charIdx;
+                if (randomize && charIdx === 7) {
+                    useRandom = true;
+                    rIdx = (Math.random() * 8) | 0;
+                }
+                texData = useRandom ? texBright : texLetters;
+                texIdx = useRandom ? rIdx : charIdx;
+            }
+
+            // Write texture into pixel data
+            for (let dy = 0; dy < 8; dy++) {
+                for (let dx = 0; dx < 8; dx++) {
+                    const px = bx * 8 + dx;
+                    const py = by * 8 + dy;
+                    const off = (py * w + px) * 4;
+                    const texOn = texData[texIdx][dy][dx];
+
+                    if (mode === "binary") {
+                        const c = texOn ? cWhite : cBlack;
+                        data[off] = c[0]; data[off+1] = c[1]; data[off+2] = c[2];
+                    } else if (mode === "palette") {
+                        if (texOn) {
+                            const pc = currentPalette[charIdx];
+                            data[off] = pc[0]; data[off+1] = pc[1]; data[off+2] = pc[2];
+                        } else {
+                            data[off] = cBlack[0]; data[off+1] = cBlack[1]; data[off+2] = cBlack[2];
+                        }
+                    } else if (mode === "blockcolor") {
+                        if (texOn) {
+                            data[off] = blockColor[0]; data[off+1] = blockColor[1]; data[off+2] = blockColor[2];
+                        } else {
+                            data[off] = cBlack[0]; data[off+1] = cBlack[1]; data[off+2] = cBlack[2];
+                        }
+                    } else {
+                        if (texOn) {
+                            const b = data[off] / 255;
+                            data[off]   = Math.round(cWhite[0] * b + c3[0] * (1 - b));
+                            data[off+1] = Math.round(cWhite[1] * b + c3[1] * (1 - b));
+                            data[off+2] = Math.round(cWhite[2] * b + c3[2] * (1 - b));
+                        } else {
+                            data[off] = cBlack[0]; data[off+1] = cBlack[1]; data[off+2] = cBlack[2];
+                        }
+                    }
+                    data[off+3] = 255;
+                }
+            }
+        }
+    }
+}
+
+// --- Main apply function ---
+async function apply() {
+    const btn = document.getElementById("applyBtn");
+    btn.disabled = true;
+
+    try {
+        if (!texLetters) {
+            setStatus("Loading textures...");
+            await initTextures();
+        }
+
+        setStatus("Reading image from Photopea...");
+        const buf = await ppGetImage();
+        const imageData = await arrayBufferToImageData(buf);
+        const w = imageData.width;
+        const h = imageData.height;
+        const data = imageData.data;
+        const params = getParams();
+
+        setStatus("Processing " + w + "x" + h + "...");
+
+        // Yield to let status update render
+        await new Promise(r => setTimeout(r, 50));
+
+        fixBorders(data, w, h, params.cBlack);
+
+        // Save original RGB before grayscale (needed for block color mode)
+        let origData = null;
+        if (params.mode === "blockcolor") {
+            origData = new Uint8ClampedArray(data);
+        }
+
+        toGrayscale(data, w, h);
+        if (params.norm) normalize(data, w, h);
+
+        let edgeMap;
+        if (params.edges) {
+            setStatus("Computing edges...");
+            await new Promise(r => setTimeout(r, 10));
+            edgeMap = calculateGradient(data, w, h);
+        } else {
+            edgeMap = new Uint8Array(w * h);
+            edgeMap.fill(4);
+        }
+
+        setStatus("Rendering ASCII...");
+        await new Promise(r => setTimeout(r, 10));
+        renderAscii(data, w, h, edgeMap, params, origData);
+
+        setStatus("Sending result...");
+        if (params.outputMode === "layer") {
+            const dataURI = imageDataToDataURI(imageData);
+            ppSendAsLayer(dataURI);
+        } else {
+            const outBuf = await imageDataToArrayBuffer(imageData);
+            ppSendAsNewDoc(outBuf);
+        }
+
+        setStatus("Done! (" + w + "x" + h + ")");
+    } catch (err) {
+        setStatus("Error: " + err.message);
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Pre-load textures on init
+initTextures().then(() => {
+    setStatus("Ready");
+});
+</script>
+
+</body>
+</html>
