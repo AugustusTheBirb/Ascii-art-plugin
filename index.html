@@ -11,7 +11,8 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 12px; padding: 8px;
 }
-h2 { font-size: 13px; margin-bottom: 8px; color: #eee; }
+h2 { font-size: 13px; margin-bottom: 8px; color: #eee; display: flex; justify-content: space-between; align-items: center; }
+.version { font-size: 10px; color: #666; font-weight: normal; }
 .section { margin-bottom: 10px; }
 label { display: block; margin-bottom: 4px; color: #aaa; font-size: 11px; }
 .row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
@@ -43,7 +44,7 @@ hr { border: none; border-top: 1px solid #3a3a3a; margin: 8px 0; }
 </head>
 <body>
 
-<h2>ASCII Art Renderer</h2>
+<h2>ASCII Art Renderer <span class="version">v2</span></h2>
 
 <div class="section">
     <div class="row">
@@ -177,6 +178,9 @@ async function initTextures() {
     texLetters = await loadTexture(TEX_LETTERS_B64, 8);
     texSlashes = await loadTexture(TEX_SLASHES_B64, 4);
     texBright = await loadTexture(TEX_BRIGHT_B64, 8);
+    console.log("Textures loaded:", texLetters.length, texSlashes.length, texBright.length);
+    console.log("Sample texture 0:", texLetters[0]);
+    console.log("Sample texture 1:", texLetters[1]);
 }
 
 // --- Photopea communication ---
@@ -544,7 +548,8 @@ function renderAscii(data, w, h, edgeMap, params, origData) {
                 blockColor = [(avgR / 64) | 0, (avgG / 64) | 0, (avgB / 64) | 0];
             }
 
-            const charIdx = (bSum / (256 * 8)) | 0;
+            let charIdx = (bSum / (256 * 8)) | 0;
+            if (charIdx > 7) charIdx = 7;
             const isEdge = edges && edgeCounts[4] < sensitivity && charIdx >= 1;
 
             let texData, texIdx;
